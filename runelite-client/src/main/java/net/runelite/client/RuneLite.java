@@ -45,6 +45,7 @@ import javax.annotation.Nullable;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.util.EnumConverter;
@@ -60,6 +61,7 @@ import net.runelite.client.chat.CommandManager;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.discord.DiscordService;
 import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.events.ExternalPluginsLoaded;
 import net.runelite.client.game.ClanManager;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.LootManager;
@@ -84,6 +86,7 @@ import net.runelite.client.ui.overlay.arrow.ArrowWorldOverlay;
 import net.runelite.client.ui.overlay.infobox.InfoBoxOverlay;
 import net.runelite.client.ui.overlay.tooltip.TooltipOverlay;
 import net.runelite.client.ui.overlay.worldmap.WorldMapOverlay;
+import net.runelite.client.util.AppLock;
 import net.runelite.client.util.WorldUtil;
 import net.runelite.client.ws.PartyService;
 import net.runelite.http.api.worlds.World;
@@ -200,6 +203,9 @@ public class RuneLite
 	@Inject
 	private Scheduler scheduler;
 
+	@Inject
+	private AppLock appLock;
+
 	public static void main(String[] args) throws Exception
 	{
 		Locale.setDefault(Locale.ENGLISH);
@@ -229,7 +235,18 @@ public class RuneLite
 			});
 
 		parser.accepts("help", "Show this text").forHelp();
-		OptionSet options = parser.parse(args);
+
+		OptionSet options = parser.parse("");
+
+		try
+		{
+			options = parser.parse(args);
+		}
+		catch (OptionException e)
+		{
+			log.warn("Error parsing launch args: {}", e.getMessage());
+			log.warn("Proceeding with no arguments.");
+		}
 
 		if (options.has("help"))
 		{
@@ -363,30 +380,29 @@ public class RuneLite
 		// Tell the plugin manager if client is outdated or not
 		pluginManager.setOutdated(isOutdated);
 
-		// Initialize UI
-		RuneLiteSplashScreen.stage(.60, "Initialize UI");
-		clientUI.init(this);
+		// Load external plugins
+		externalPluginManager.startExternalUpdateManager();
+		externalPluginManager.startExternalPluginManager();
+
+		if (appLock.lock(this.getClass().getName()))
+		{
+			RuneLiteSplashScreen.stage(.59, "Updating external plugins");
+			externalPluginManager.update();
+		}
 
 		// Load the plugins, but does not start them yet.
 		// This will initialize configuration
 		pluginManager.loadCorePlugins();
+		externalPluginManager.loadPlugins();
 
 		// Load external plugins
-		externalPluginManager.startExternalPluginManager();
+		pluginManager.loadExternalPlugins();
 
-		RuneLiteSplashScreen.stage(.75, "Finalizing configuration");
+		RuneLiteSplashScreen.stage(.76, "Finalizing configuration");
 
 		// Plugins have provided their config, so set default config
 		// to main settings
 		pluginManager.loadDefaultPluginConfiguration();
-
-		externalPluginManager.startExternalUpdateManager();
-
-		RuneLiteSplashScreen.stage(.77, "Updating external plugins");
-		externalPluginManager.update();
-
-		// Load external plugins
-		pluginManager.loadExternalPlugins();
 
 		// Start client session
 		RuneLiteSplashScreen.stage(.80, "Starting core interface");
@@ -395,6 +411,10 @@ public class RuneLite
 		//Set the world if specified via CLI args - will not work until clientUI.init is called
 		Optional<Integer> worldArg = Optional.ofNullable(System.getProperty("cli.world")).map(Integer::parseInt);
 		worldArg.ifPresent(this::setWorld);
+
+		// Initialize UI
+		RuneLiteSplashScreen.stage(.77, "Initialize UI");
+		clientUI.init(this);
 
 		// Initialize Discord service
 		discordService.init();
@@ -429,8 +449,8 @@ public class RuneLite
 		}
 
 		// Start plugins
-		pluginManager.startCorePlugins();
-		externalPluginManager.loadPlugins();
+		pluginManager.startPlugins();
+		eventBus.post(ExternalPluginsLoaded.class, new ExternalPluginsLoaded());
 
 		// Register additional schedulers
 		if (this.client != null)
@@ -488,5 +508,6 @@ public class RuneLite
 		configManager.sendConfig();
 		clientSessionManager.shutdown();
 		discordService.close();
+		appLock.release();
 	}
 }

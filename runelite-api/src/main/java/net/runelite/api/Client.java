@@ -1985,4 +1985,29 @@ public interface Client extends GameShell
 	void setMouseIdleTicks(int cycles);
 
 	void setKeyboardIdleTicks(int cycles);
+
+	/**
+	 * Sets the result count for GE search
+	 */
+	void setGeSearchResultCount(int count);
+
+	/**
+	 * Sets the array of item ids for GE search
+	 */
+	void setGeSearchResultIds(short[] ids);
+
+	/**
+	 * Sets the starting index in the item id array for GE search
+	 */
+	void setGeSearchResultIndex(int index);
+
+	/**
+	 * Sets values related to jagex compliance
+	 */
+	void setComplianceValue(@Nonnull String key, boolean value);
+
+	/**
+	 * Gets values related to jagex compliance
+	 */
+	boolean getComplianceValue(@Nonnull String key);
 }

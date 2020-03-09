@@ -41,7 +41,6 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -90,7 +89,7 @@ import net.runelite.client.config.Keybind;
 import net.runelite.client.config.ModifierlessKeybind;
 import net.runelite.client.config.Range;
 import net.runelite.client.config.Units;
-import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.events.PluginChanged;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.ui.ColorScheme;
@@ -135,6 +134,9 @@ class ConfigPanel extends PluginPanel
 
 	@Inject
 	private ColorPickerManager colorPickerManager;
+
+	@Inject
+	private EventBus eventBus;
 
 	private PluginConfigurationDescriptor pluginConfig = null;
 	private final Map<String, JPanel> sectionWidgets = new HashMap<>();
@@ -230,6 +232,7 @@ class ConfigPanel extends PluginPanel
 		}
 
 		rebuild(false);
+		eventBus.subscribe(PluginChanged.class, this, this::onPluginChanged);
 	}
 
 	private void getSections(ConfigDescriptor cd)
@@ -668,11 +671,7 @@ class ConfigPanel extends PluginPanel
 
 					if (units != null)
 					{
-						DecimalFormat df = ((JSpinner.NumberEditor) spinner.getEditor()).getFormat();
-						df.setPositiveSuffix(units.value());
-						df.setNegativeSuffix(units.value());
-						// Force update the spinner to have it add the units initially
-						spinnerTextField.setValue(value);
+						spinnerTextField.setFormatterFactory(new UnitFormatterFactory(units));
 					}
 
 					item.add(spinner, BorderLayout.EAST);
@@ -808,11 +807,7 @@ class ConfigPanel extends PluginPanel
 
 				if (units != null)
 				{
-					DecimalFormat df = ((JSpinner.NumberEditor) widthSpinner.getEditor()).getFormat();
-					df.setPositiveSuffix(units.value());
-					df.setNegativeSuffix(units.value());
-					// Force update the spinner to have it add the units initially
-					widthSpinnerTextField.setValue(width);
+					widthSpinnerTextField.setFormatterFactory(new UnitFormatterFactory(units));
 				}
 
 				SpinnerModel heightModel = new SpinnerNumberModel(height, 0, Integer.MAX_VALUE, 1);
@@ -823,11 +818,7 @@ class ConfigPanel extends PluginPanel
 
 				if (units != null)
 				{
-					DecimalFormat df = ((JSpinner.NumberEditor) heightSpinner.getEditor()).getFormat();
-					df.setPositiveSuffix(units.value());
-					df.setNegativeSuffix(units.value());
-					// Force update the spinner to have it add the units initially
-					heightSpinnerTextField.setValue(height);
+					heightSpinnerTextField.setFormatterFactory(new UnitFormatterFactory(units));
 				}
 
 				ChangeListener listener = e ->
@@ -1169,7 +1160,6 @@ class ConfigPanel extends PluginPanel
 		return new Dimension(PANEL_WIDTH + SCROLLBAR_WIDTH, super.getPreferredSize().height);
 	}
 
-	@Subscribe
 	public void onPluginChanged(PluginChanged event)
 	{
 		if (event.getPlugin() == this.pluginConfig.getPlugin())
